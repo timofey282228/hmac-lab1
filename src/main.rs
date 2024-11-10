@@ -1,6 +1,11 @@
-use rand::{random, Rng};
+use crate::message_gen::{
+    MessaageGenerator, NaturalNumberMessageGenerator, RandomChangeMessageGenerator,
+};
+use rand::Rng;
 use sha2::{Digest, Sha384};
 use std::collections::HashMap;
+
+mod message_gen;
 
 const INITIAL_MESSAGE: &str = "Подолянко Тимофій Олександрович";
 
@@ -23,46 +28,13 @@ fn my_hash_32(bytes: &[u8]) -> [u8; 4] {
         .expect("should take last four bytes of digest slice")
 }
 
-/// add a random natural number (u64) string to the message
-fn transform_message_1(message: &str) -> String {
-    let random: u64 = random();
-    let random_string = random.to_string();
-    let mut new_message = String::from(message);
-    new_message.push_str(&random_string);
-
-    new_message
-}
-
-/// replace a random character with a random ascii graphical character
-fn transform_message_2(message: &str) -> String {
-    // choose a random character index
-    let index = rand::thread_rng().gen_range(0..message.chars().count());
-
-    // choose a random replacement character
-    let new_char = rand::thread_rng().gen_range('!'..='~');
-
-    let mut new_message = String::from(message);
-    let replace_char_index = new_message
-        .char_indices()
-        .nth(index)
-        .expect("index less than message.chars().count()");
-
-    new_message.replace_range(
-        replace_char_index.0..(replace_char_index.0 + replace_char_index.1.len_utf8()),
-        &new_char.to_string(),
-    );
-
-    new_message
-}
-
-fn pre_attack<T, F, H>(
+fn pre_attack<F, H>(
     message: &str,
-    mut transform_func: T,
-    mut hash_func: F,
+    mut message_generator: impl MessaageGenerator,
+    hash_func: F,
     incremental_transform: bool,
 ) -> AttackStats
 where
-    T: Fn(&str) -> String,
     F: Fn(&[u8]) -> H,
     H: Eq,
 {
@@ -73,9 +45,9 @@ where
     let mut last_message = message.to_owned();
     loop {
         if incremental_transform {
-            other_message = transform_func(&last_message);
+            other_message = message_generator.generate_from(&last_message);
         } else {
-            other_message = transform_func(message);
+            other_message = message_generator.generate_from(message);
         }
 
         attack_stats.generated_messages_count += 1;
@@ -94,14 +66,13 @@ where
     attack_stats
 }
 
-fn bd_attack<T, F, H>(
+fn bd_attack<F, H>(
     message: &str,
-    mut transform_func: T,
-    mut hash_func: F,
+    mut message_generator: impl MessaageGenerator,
+    hash_func: F,
     incremental_transform: bool,
 ) -> AttackStats
 where
-    T: Fn(&str) -> String,
     F: Fn(&[u8]) -> H,
     H: std::hash::Hash + Eq,
 {
@@ -115,9 +86,9 @@ where
     loop {
         let new_message: String;
         if incremental_transform {
-            new_message = transform_func(&last_message);
+            new_message = message_generator.generate_from(&last_message);
         } else {
-            new_message = transform_func(message);
+            new_message = message_generator.generate_from(message);
         }
 
         attack_stats.generated_messages_count += 1;
@@ -175,7 +146,7 @@ fn main() {
         println!("Initial message: {per_run_init_message}");
         let attack_stats = pre_attack(
             &per_run_init_message,
-            transform_message_1,
+            NaturalNumberMessageGenerator::default(),
             my_hash_16,
             false,
         );
@@ -194,7 +165,12 @@ fn main() {
     for _ in 0..PRE_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("PRE ");
         println!("Initial message: {per_run_init_message}");
-        let attack_stats = pre_attack(&per_run_init_message, transform_message_2, my_hash_16, true);
+        let attack_stats = pre_attack(
+            &per_run_init_message,
+            RandomChangeMessageGenerator::default(),
+            my_hash_16,
+            true,
+        );
 
         cas_pre_2.include_attack(&attack_stats);
     }
@@ -212,7 +188,7 @@ fn main() {
         println!("Initial message: {per_run_init_message}");
         let attack_stats = bd_attack(
             &per_run_init_message,
-            transform_message_1,
+            NaturalNumberMessageGenerator::default(),
             my_hash_32,
             false,
         );
@@ -230,7 +206,12 @@ fn main() {
     for _ in 0..BD_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("BD ");
         println!("Initial message: {per_run_init_message}");
-        let attack_stats = bd_attack(&per_run_init_message, transform_message_2, my_hash_32, true);
+        let attack_stats = bd_attack(
+            &per_run_init_message,
+            RandomChangeMessageGenerator::default(),
+            my_hash_32,
+            true,
+        );
         cas_bd_2.include_attack(&attack_stats);
     }
 
