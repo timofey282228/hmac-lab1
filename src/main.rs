@@ -1,18 +1,20 @@
 use crate::attacks::attack::Attack;
+use crate::attacks::collision_search::CollisionSearch;
 use crate::attacks::preimage_search::RandomPreimageSearch;
-use crate::message_gen::{MessaageGenerator, NaturalNumberMessageGenerator, RandomChangeMessageGenerator};
-use rand::Rng;
-use sha2::{Digest, Sha384};
+use crate::message_gen::{
+    MessaageGenerator, NaturalNumberMessageGenerator, RandomChangeMessageGenerator,
+};
 use attacks::attack_options::AttackOptions;
 use attacks::attack_stats::CumulativeAttackStats;
-use crate::attacks::collision_search::CollisionSearch;
+use rand::Rng;
+use sha2::{Digest, Sha384};
 
 pub mod attacks;
 mod message_gen;
 
 const INITIAL_MESSAGE: &str = "Подолянко Тимофій Олександрович";
 
-const DEFAULT_ATTACK_RUN_COUNT: usize = 10;
+const DEFAULT_ATTACK_RUN_COUNT: usize = 100;
 const PRE_ATTACK_RUN_COUNT: usize = DEFAULT_ATTACK_RUN_COUNT;
 const BD_ATTACK_RUN_COUNT: usize = DEFAULT_ATTACK_RUN_COUNT;
 
@@ -36,7 +38,7 @@ fn prepare_run_unique_message(prefix: &str) -> String {
     per_run_init_message.push_str(INITIAL_MESSAGE);
     per_run_init_message.push(' ');
 
-    let message_suffix: String = (0..rand::thread_rng().gen_range(0..PRE_ATTACK_RUN_COUNT / 5))
+    let message_suffix: String = (0..PRE_ATTACK_RUN_COUNT / 5)
         .map(|_| rand::thread_rng().gen_range('!'..='~'))
         .filter(|c| c.is_ascii_graphic())
         .collect();
@@ -45,11 +47,21 @@ fn prepare_run_unique_message(prefix: &str) -> String {
     per_run_init_message
 }
 
+fn display_init_msg_info(message: &str) {
+    let sha384 = Sha384::digest(message.as_bytes());
+    println!("Initial message: {message}\n {:X}", sha384);
+}
+
+fn display_generated_message(message: &str) {
+    let sha384 = Sha384::digest(message.as_bytes());
+    println!("| {} | {:X} | ", message, sha384);
+}
+
 fn main() {
     let mut cas_pre_1 = CumulativeAttackStats::default();
     for _ in 0..PRE_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("PRE ");
-        println!("Initial message: {per_run_init_message}");
+        display_init_msg_info(&per_run_init_message);
 
         let mut attack = RandomPreimageSearch::new(
             &per_run_init_message,
@@ -72,7 +84,7 @@ fn main() {
     let mut cas_pre_2 = CumulativeAttackStats::default();
     for _ in 0..PRE_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("PRE ");
-        println!("Initial message: {per_run_init_message}");
+        display_init_msg_info(&per_run_init_message);
 
         let mut attack = RandomPreimageSearch::new(
             &per_run_init_message,
@@ -95,13 +107,13 @@ fn main() {
     let mut cas_bd_1 = CumulativeAttackStats::default();
     for _ in 0..BD_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("BD ");
-        println!("Initial message: {per_run_init_message}");
+        display_init_msg_info(&per_run_init_message);
 
         let mut attack = CollisionSearch::new(
             &per_run_init_message,
             NaturalNumberMessageGenerator::default(),
             my_hash_32,
-            AttackOptions::default()
+            AttackOptions::default(),
         );
 
         let attack_stats = attack.run();
@@ -118,13 +130,13 @@ fn main() {
     let mut cas_bd_2 = CumulativeAttackStats::default();
     for _ in 0..BD_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("BD ");
-        println!("Initial message: {per_run_init_message}");
+        display_init_msg_info(&per_run_init_message);
 
         let mut attack = CollisionSearch::new(
             &per_run_init_message,
             RandomChangeMessageGenerator::default(),
             my_hash_32,
-            AttackOptions::default().set_incremental_transform(true)
+            AttackOptions::default().set_incremental_transform(true),
         );
 
         let attack_stats = attack.run();
@@ -138,4 +150,3 @@ fn main() {
         int = cas_bd_2.confidence_interval()
     );
 }
-

@@ -1,5 +1,6 @@
 use crate::attacks::attack::*;
 use crate::attacks::attack_options::AttackOptions;
+use crate::display_generated_message;
 use crate::message_gen::MessaageGenerator;
 use super::attack_stats::AttackStats;
 
@@ -41,6 +42,7 @@ where
         let target_hash = (self.hash_function)(message.as_bytes());
         let mut other_message: String;
         let mut attack_stats = AttackStats::default();
+        let final_message: String;
 
         let mut last_message = message.to_owned();
         loop {
@@ -52,9 +54,15 @@ where
 
             attack_stats.generated_messages_count += 1;
 
+            // TODO: 👇
+            if attack_stats.generated_messages_count <= 30 {
+                display_generated_message(&other_message);
+            }
+
             let other_hash = (self.hash_function)(other_message.as_bytes());
 
             if target_hash == other_hash && message != other_message {
+                final_message = other_message;
                 break;
             }
 
@@ -63,9 +71,13 @@ where
             }
         }
 
-        println!("Collision: {other_message} :-: {message}");
+
+
+        // TODO: 👇
+        println!("...");
+        display_generated_message(&final_message);
+        println!("Collision:\n          hash({message}) == hash({final_message})");
+
         attack_stats
     }
 }
-
-// std::hash::Hash + Eq
