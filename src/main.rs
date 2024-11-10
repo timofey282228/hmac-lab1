@@ -1,3 +1,4 @@
+use std::error::Error;
 use crate::attacks::attack::Attack;
 use crate::attacks::collision_search::CollisionSearch;
 use crate::attacks::preimage_search::RandomPreimageSearch;
@@ -57,9 +58,10 @@ fn display_generated_message(message: &str) {
     println!("| {} | {:X} | ", message, sha384);
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>>{
+    let mut wrt = csv::Writer::from_path("pre_1.csv")?;
     let mut cas_pre_1 = CumulativeAttackStats::default();
-    for _ in 0..PRE_ATTACK_RUN_COUNT {
+    for i in 1..=PRE_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("PRE ");
         display_init_msg_info(&per_run_init_message);
 
@@ -72,6 +74,11 @@ fn main() {
 
         let attack_stats = attack.run();
         cas_pre_1.include_attack(&attack_stats);
+
+        wrt.write_record([
+            format!("{}", i),
+            format!("{}", attack_stats.generated_messages_count),
+        ])?;
     }
 
     println!(
@@ -81,8 +88,9 @@ fn main() {
         int = cas_pre_1.confidence_interval()
     );
 
+    let mut wrt = csv::Writer::from_path("pre_2.csv")?;
     let mut cas_pre_2 = CumulativeAttackStats::default();
-    for _ in 0..PRE_ATTACK_RUN_COUNT {
+    for i in 1..=PRE_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("PRE ");
         display_init_msg_info(&per_run_init_message);
 
@@ -95,6 +103,11 @@ fn main() {
 
         let attack_stats = attack.run();
         cas_pre_2.include_attack(&attack_stats);
+
+        wrt.write_record([
+            format!("{}", i),
+            format!("{}", attack_stats.generated_messages_count),
+        ])?;
     }
 
     println!(
@@ -104,8 +117,9 @@ fn main() {
         int = cas_pre_2.confidence_interval()
     );
 
+    let mut wrt = csv::Writer::from_path("bd_1.csv")?;
     let mut cas_bd_1 = CumulativeAttackStats::default();
-    for _ in 0..BD_ATTACK_RUN_COUNT {
+    for i in 1..=BD_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("BD ");
         display_init_msg_info(&per_run_init_message);
 
@@ -118,6 +132,11 @@ fn main() {
 
         let attack_stats = attack.run();
         cas_bd_1.include_attack(&attack_stats);
+
+        wrt.write_record([
+            format!("{}", i),
+            format!("{}", attack_stats.generated_messages_count),
+        ])?;
     }
 
     println!(
@@ -127,8 +146,9 @@ fn main() {
         int = cas_bd_1.confidence_interval()
     );
 
+    let mut wrt = csv::Writer::from_path("bd_2.csv")?;
     let mut cas_bd_2 = CumulativeAttackStats::default();
-    for _ in 0..BD_ATTACK_RUN_COUNT {
+    for i in 1..=BD_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("BD ");
         display_init_msg_info(&per_run_init_message);
 
@@ -141,6 +161,11 @@ fn main() {
 
         let attack_stats = attack.run();
         cas_bd_2.include_attack(&attack_stats);
+
+        wrt.write_record([
+            format!("{}", i),
+            format!("{}", attack_stats.generated_messages_count),
+        ])?;
     }
 
     println!(
@@ -149,4 +174,6 @@ fn main() {
         var = cas_bd_2.variance(),
         int = cas_bd_2.confidence_interval()
     );
+
+    Ok(())
 }
