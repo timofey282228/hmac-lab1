@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::{random, Rng};
 use sha2::{Digest, Sha384};
 use std::collections::HashMap;
 
@@ -25,7 +25,7 @@ fn my_hash_32(bytes: &[u8]) -> [u8; 4] {
 
 /// add a random natural number (u64) string to the message
 fn transform_message_1(message: &str) -> String {
-    let random: u64 = rand::thread_rng().gen();
+    let random: u64 = random();
     let random_string = random.to_string();
     let mut new_message = String::from(message);
     new_message.push_str(&random_string);
@@ -62,8 +62,8 @@ fn pre_attack<T, F, H>(
     incremental_transform: bool,
 ) -> AttackStats
 where
-    T: FnMut(&str) -> String,
-    F: FnMut(&[u8]) -> H,
+    T: Fn(&str) -> String,
+    F: Fn(&[u8]) -> H,
     H: Eq,
 {
     let target_hash = hash_func(message.as_bytes());
@@ -82,7 +82,7 @@ where
 
         let other_hash = hash_func(other_message.as_bytes());
 
-        if target_hash == other_hash {
+        if target_hash == other_hash && message != other_message {
             break;
         }
         if incremental_transform {
@@ -94,21 +94,32 @@ where
     attack_stats
 }
 
-// TODO: incremental transform option
-fn bd_attack<T, F, H>(message: &str, mut transform_func: T, mut hash_func: F) -> AttackStats
+fn bd_attack<T, F, H>(
+    message: &str,
+    mut transform_func: T,
+    mut hash_func: F,
+    incremental_transform: bool,
+) -> AttackStats
 where
-    T: FnMut(&str) -> String,
-    F: FnMut(&[u8]) -> H,
+    T: Fn(&str) -> String,
+    F: Fn(&[u8]) -> H,
     H: std::hash::Hash + Eq,
 {
     let mut map: HashMap<H, String> = HashMap::new();
     let mut attack_stats = AttackStats::default();
-
     let initial_hash = hash_func(message.as_bytes());
+    let mut last_message = message.to_owned();
+
     map.insert(initial_hash, message.to_owned());
 
     loop {
-        let new_message = transform_func(message);
+        let new_message: String;
+        if incremental_transform {
+            new_message = transform_func(&last_message);
+        } else {
+            new_message = transform_func(message);
+        }
+
         attack_stats.generated_messages_count += 1;
         let new_message_hash = hash_func(new_message.as_bytes());
 
@@ -117,8 +128,12 @@ where
                 .get_key_value(&new_message_hash)
                 .expect("map.contains_key(&hash) was true");
 
-            if collision.1 == message {
-                // same message
+            if collision.1 == &new_message {
+                // same message, not a collision
+                if incremental_transform {
+                    last_message = new_message.to_owned();
+                }
+
                 continue;
             }
 
@@ -127,6 +142,10 @@ where
                 collision = collision.1
             );
             break;
+        }
+
+        if incremental_transform {
+            last_message = new_message.to_owned();
         }
 
         map.insert(new_message_hash, new_message);
@@ -171,26 +190,58 @@ fn main() {
         int = cas_pre_1.confidence_interval()
     );
 
+    let mut cas_pre_2 = CumulativeAttackStats::default();
     for _ in 0..PRE_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("PRE ");
         println!("Initial message: {per_run_init_message}");
-        pre_attack(&per_run_init_message, transform_message_2, my_hash_16, true);
+        let attack_stats = pre_attack(&per_run_init_message, transform_message_2, my_hash_16, true);
+
+        cas_pre_2.include_attack(&attack_stats);
     }
 
+    println!(
+        "Average: {avg}; variance: {var}; interval: {int:?}",
+        avg = cas_pre_2.average(),
+        var = cas_pre_2.variance(),
+        int = cas_pre_2.confidence_interval()
+    );
+
+    let mut cas_bd_1 = CumulativeAttackStats::default();
     for _ in 0..BD_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("BD ");
         println!("Initial message: {per_run_init_message}");
-        bd_attack(&per_run_init_message, transform_message_1, my_hash_32);
+        let attack_stats = bd_attack(
+            &per_run_init_message,
+            transform_message_1,
+            my_hash_32,
+            false,
+        );
+        cas_bd_1.include_attack(&attack_stats);
     }
 
+    println!(
+        "Average: {avg}; variance: {var}; interval: {int:?}",
+        avg = cas_bd_1.average(),
+        var = cas_bd_1.variance(),
+        int = cas_bd_1.confidence_interval()
+    );
+
+    let mut cas_bd_2 = CumulativeAttackStats::default();
     for _ in 0..BD_ATTACK_RUN_COUNT {
         let per_run_init_message = prepare_run_unique_message("BD ");
         println!("Initial message: {per_run_init_message}");
-        bd_attack(&per_run_init_message, transform_message_2, my_hash_32);
+        let attack_stats = bd_attack(&per_run_init_message, transform_message_2, my_hash_32, true);
+        cas_bd_2.include_attack(&attack_stats);
     }
+
+    println!(
+        "Average: {avg}; variance: {var}; interval: {int:?}",
+        avg = cas_bd_2.average(),
+        var = cas_bd_2.variance(),
+        int = cas_bd_2.confidence_interval()
+    );
 }
 
-/// ?
 struct AttackStats {
     generated_messages_count: u64,
 }
